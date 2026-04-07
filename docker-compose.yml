@@ -1,17 +1,20 @@
 services:
   turn:
     image: coturn/coturn:4.6
+    working_dir: /tmp
     command:
       - -n
-      - --log-file=stdout
       - --min-port=49160
       - --max-port=49200
       - --realm=${TURN_REALM:-dlite}
-      - --external-ip=${TURN_EXTERNAL_IP:-}
       - --user=${TURN_USER:-dlite}:${TURN_PASSWORD:-dlite}
+      - --lt-cred-mech
       - --fingerprint
       - --no-multicast-peers
       - --no-cli
+      - --no-tls
+      - --no-dtls
+      - --pidfile=/tmp/turnserver.pid
     ports:
       - "3478:3478/udp"
       - "3478:3478/tcp"
@@ -21,6 +24,7 @@ services:
   api-gateway:
     build:
       context: ./D-Lite-api-gateway
+      network: host
     env_file: ./.env
     environment:
       GATEWAY_PORT: ${GATEWAY_PORT:-4000}
@@ -41,6 +45,7 @@ services:
   auth-service:
     build:
       context: ./D-Lite-auth-service
+      network: host
     env_file: ./.env
     environment:
       PORT: ${AUTH_PORT:-4001}
@@ -53,6 +58,7 @@ services:
   chat-service:
     build:
       context: ./D-Lite-chat-service
+      network: host
     env_file: ./.env
     environment:
       PORT: ${CHAT_PORT:-4002}
@@ -65,6 +71,7 @@ services:
   call-service:
     build:
       context: ./D-Lite-call-service
+      network: host
     env_file: ./.env
     environment:
       PORT: ${CALL_PORT:-4003}
@@ -93,6 +100,7 @@ services:
   media-service:
     build:
       context: ./D-Lite-media-service
+      network: host
     env_file: ./.env
     environment:
       PORT: ${MEDIA_PORT:-4004}
@@ -107,6 +115,7 @@ services:
   backup-worker:
     build:
       context: ./D-Lite-backup-worker
+      network: host
     env_file: ./.env
     environment:
       NODE_ENV: ${NODE_ENV:-production}
@@ -125,6 +134,7 @@ services:
   frontend:
     build:
       context: ./frontend-service
+      network: host
       args:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://api-gateway:4000}
         NEXT_PUBLIC_CHAT_SOCKET_URL: ${NEXT_PUBLIC_CHAT_SOCKET_URL:-http://chat-service:4002}

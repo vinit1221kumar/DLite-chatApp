@@ -13,13 +13,13 @@ This repository contains:
 ## Features
 
 - **Authentication**
-  - Frontend uses a browser auth SDK + realtime database profile/presence.
-  - Backend auth-service uses Supabase Auth (JWT validation + `/me`).
+  - Backend auth-service uses **Supabase Auth** (primary) with `/me`.
+  - If Supabase is unreachable in local setups, auth-service can fall back to locally-issued JWTs (dev-friendly).
 - **Direct & group chat**
-  - Realtime database based chat state (threads, messages, presence, typing, reactions, pinned messages).
-  - Chat microservice provides REST reads from Supabase (protected with `Authorization: Bearer <token>`).
+  - Chat service provides REST reads and Socket.IO realtime events.
+  - When configured, messages are persisted in Supabase Postgres (`messages` table).
 - **Calls**
-  - WebRTC signaling via Socket.IO (call-service) + optional in-app call state via realtime database.
+  - WebRTC signaling via Socket.IO (call-service).
 - **Media**
   - Media service uploads to Cloudinary (optional; runs in degraded mode when not configured).
 - **Backups**
@@ -74,27 +74,27 @@ docker-compose.yml        # Full stack (Docker)
 
 ## Environment
 
-Copy `.env.example` to `.env` in repo root and update values:
-
-```bash
-cp .env.example .env
-```
+This repo uses **per-service env files** (recommended). Each service folder has:
+- `.env.example` (safe to commit)
+- `.env` (secrets; keep private)
 
 ### Required for full functionality
 
 - **Supabase (auth/chat)**
-  - `SUPABASE_URL`
-  - `SUPABASE_ANON_KEY`
-  - `SUPABASE_SERVICE_ROLE_KEY` (needed by backup worker; chat service can use it too)
+  - `D-Lite-auth-service/.env`: `SUPABASE_URL`, `SUPABASE_ANON_KEY`
+  - `D-Lite-chat-service/.env`: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (preferred) or `SUPABASE_ANON_KEY`
+  - `D-Lite-backup-worker/.env`: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
 - **MongoDB (backup)**
-  - `MONGODB_URI` (worker) and/or `NEXT_PUBLIC_MONGODB_URI` (frontend internal route)
+  - `D-Lite-backup-worker/.env`: `MONGODB_URI`
 
 ### Optional
 
 - **Cloudinary (media uploads)**
-  - `CLOUDINARY_CLOUD_NAME`
-  - `CLOUDINARY_API_KEY`
-  - `CLOUDINARY_API_SECRET`
+  - `D-Lite-media-service/.env`: `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
+
+- **Local auth fallback consistency**
+  - `D-Lite-auth-service/.env`: `AUTH_JWT_SECRET`
+  - `D-Lite-chat-service/.env`: `AUTH_JWT_SECRET` (must match auth-service)
 
 If you don’t set optional values, services still start but the related features respond with `503` until configured.
 
@@ -118,6 +118,8 @@ docker compose up --build
 - **Only expose** `frontend` (`3000`) and `api-gateway` (`4000`) publicly; internal services stay on an internal network.
 - `mongo` and `redis` are **not published** to the host in `docker-compose.yml` (production-safe default).
 - Services include **healthchecks** and `depends_on: condition: service_healthy` for safer startup ordering.
+
+See `docs/PRODUCTION.md` for a full checklist.
 
 ### Docker permission denied fix
 
@@ -183,8 +185,8 @@ curl -sS http://localhost:4000/media/health
 - **Gateway can’t reach a service**
   - Check the service port is running and `AUTH_SERVICE_URL` / `CHAT_SERVICE_URL` / `CALL_SERVICE_URL` / `MEDIA_SERVICE_URL` are correct.
 - **Auth/Chat returns 503**
-  - Set Supabase env vars in `.env` and restart.
+  - Set Supabase env vars in the service `.env` files and restart.
 - **Media returns 503**
-  - Set Cloudinary env vars in `.env` and restart.
+  - Set Cloudinary env vars in `D-Lite-media-service/.env` and restart.
 - **Backup disabled**
-  - Set `SUPABASE_SERVICE_ROLE_KEY` + `MONGODB_URI` and restart worker.
+  - Set `SUPABASE_SERVICE_ROLE_KEY` + `MONGODB_URI` in `D-Lite-backup-worker/.env` and restart worker.

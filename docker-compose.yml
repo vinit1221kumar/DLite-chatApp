@@ -20,11 +20,17 @@ services:
       - "3478:3478/tcp"
       - "49160-49200:49160-49200/udp"
     restart: unless-stopped
+    networks:
+      - public
+    healthcheck:
+      test: ["CMD", "sh", "-lc", "turnserver -V >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
 
   api-gateway:
     build:
       context: ./D-Lite-api-gateway
-      network: host
     env_file: ./D-Lite-api-gateway/.env
     environment:
       GATEWAY_PORT: ${GATEWAY_PORT:-4000}
@@ -36,42 +42,82 @@ services:
     ports:
       - "${GATEWAY_PORT:-4000}:4000"
     depends_on:
-      - auth-service
-      - chat-service
-      - call-service
-      - media-service
+      auth-service:
+        condition: service_healthy
+      chat-service:
+        condition: service_healthy
+      call-service:
+        condition: service_healthy
+      media-service:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - public
+      - internal
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:4000/health', timeout=2).read()",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   auth-service:
     build:
       context: ./D-Lite-auth-service
-      network: host
     env_file: ./D-Lite-auth-service/.env
     environment:
       PORT: ${AUTH_PORT:-4001}
       NODE_ENV: ${NODE_ENV:-production}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
-    ports:
-      - "${AUTH_PORT:-4001}:4001"
     restart: unless-stopped
+    networks:
+      - internal
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:4001/health', timeout=2).read()",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   chat-service:
     build:
       context: ./D-Lite-chat-service
-      network: host
     env_file: ./D-Lite-chat-service/.env
     environment:
       PORT: ${CHAT_PORT:-4002}
       NODE_ENV: ${NODE_ENV:-production}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
-    ports:
-      - "${CHAT_PORT:-4002}:4002"
     restart: unless-stopped
+    networks:
+      - internal
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:4002/health', timeout=2).read()",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   call-service:
     build:
       context: ./D-Lite-call-service
-      network: host
     env_file: ./D-Lite-call-service/.env
     environment:
       PORT: ${CALL_PORT:-4003}
@@ -82,25 +128,43 @@ services:
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-10000}
       RATE_LIMIT_MAX_MESSAGES: ${RATE_LIMIT_MAX_MESSAGES:-60}
       CALL_SESSION_TTL_SECONDS: ${CALL_SESSION_TTL_SECONDS:-3600}
-    ports:
-      - "${CALL_PORT:-4003}:4003"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - internal
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:4003/health', timeout=2).read()",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
-    ports:
-      - "6379:6379"
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
 
   media-service:
     build:
       context: ./D-Lite-media-service
-      network: host
     env_file: ./D-Lite-media-service/.env
     environment:
       PORT: ${MEDIA_PORT:-4004}
@@ -108,28 +172,48 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       MAX_FILE_SIZE_MB: ${MAX_FILE_SIZE_MB:-50}
       CLOUDINARY_FOLDER: ${CLOUDINARY_FOLDER:-d-lite/media}
-    ports:
-      - "${MEDIA_PORT:-4004}:4004"
     restart: unless-stopped
+    networks:
+      - internal
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:4004/health', timeout=2).read()",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
   backup-worker:
     build:
       context: ./D-Lite-backup-worker
-      network: host
     env_file: ./D-Lite-backup-worker/.env
     environment:
       NODE_ENV: ${NODE_ENV:-production}
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - internal
 
   mongo:
     image: mongo:7
-    ports:
-      - "27017:27017"
     volumes:
       - mongo_data:/data/db
     restart: unless-stopped
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
 
   frontend:
     build:
@@ -148,10 +232,18 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - api-gateway
+      api-gateway:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - public
 
 volumes:
   redis_data:
   mongo_data:
+
+networks:
+  public:
+  internal:
+    internal: true
 

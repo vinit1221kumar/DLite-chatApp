@@ -60,12 +60,12 @@ The gateway proxies:
 ## Repo structure
 
 ```text
-D-Lite-api-gateway/       # Gateway proxy (Express)
-D-Lite-auth-service/      # Auth REST (Supabase)
-D-Lite-chat-service/      # Chat REST + socket server (Supabase)
-D-Lite-call-service/      # WebRTC signaling (Socket.IO)
-D-Lite-media-service/     # Cloudinary uploads (optional)
-D-Lite-backup-worker/     # Cron-based backup (optional)
+D-Lite-api-gateway/       # Gateway proxy (FastAPI)
+D-Lite-auth-service/      # Auth REST (FastAPI + Supabase)
+D-Lite-chat-service/      # Chat REST + Socket.IO (FastAPI/ASGI)
+D-Lite-call-service/      # WebRTC signaling (Socket.IO / ASGI)
+D-Lite-media-service/     # Media upload service (FastAPI + Cloudinary optional)
+D-Lite-backup-worker/     # Backup worker (Python, optional)
 frontend-service/         # Next.js frontend
 database/                 # Reference schema/docs
 docker-compose.yml        # Full stack (Docker)
@@ -100,16 +100,7 @@ If you don’t set optional values, services still start but the related feature
 
 ## Run locally (without Docker)
 
-In separate terminals:
-
-```bash
-cd D-Lite-api-gateway && npm install && npm run dev
-cd D-Lite-auth-service && npm install && PORT=4001 npm run dev
-cd D-Lite-chat-service && npm install && PORT=4002 npm run dev
-cd D-Lite-call-service && npm install && PORT=4003 npm run dev
-cd D-Lite-media-service && npm install && PORT=4004 npm run dev
-cd frontend-service && npm install && npm run dev
-```
+Backend is now Python-based. You can still run locally, but Docker is recommended.
 
 Notes:
 
@@ -122,6 +113,11 @@ From repo root:
 ```bash
 docker compose up --build
 ```
+
+### Production notes (recommended)
+- **Only expose** `frontend` (`3000`) and `api-gateway` (`4000`) publicly; internal services stay on an internal network.
+- `mongo` and `redis` are **not published** to the host in `docker-compose.yml` (production-safe default).
+- Services include **healthchecks** and `depends_on: condition: service_healthy` for safer startup ordering.
 
 ### Docker permission denied fix
 
